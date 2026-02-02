@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Congratulation Texts - Birthday Bot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <script>
+        const tg = window.Telegram?.WebApp;
+        if (tg) tg.ready();
+        function getUserId() {
+            if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) return tg.initDataUnsafe.user.id;
+            return new URLSearchParams(window.location.search).get('user_id') || 0;
+        }
+        function apiUrl(path) {
+            return path + (path.includes('?') ? '&' : '?') + 'user_id=' + getUserId();
+        }
+        const headers = { 'Content-Type': 'application/json' };
+    </script>
+
+    <div class="max-w-lg mx-auto p-4">
+        <!-- Header -->
+        <div class="flex items-center mb-6">
+            <a href="/" class="text-blue-600 mr-3">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </a>
+            <h1 class="text-2xl font-bold text-gray-800">Congratulation Texts</h1>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex space-x-1 bg-gray-200 rounded-lg p-1 mb-6">
+            <button onclick="showTab('list')" id="tab-list" class="flex-1 py-2 text-sm font-medium rounded-md bg-white shadow text-gray-800">Templates</button>
+            <button onclick="showTab('add')" id="tab-add" class="flex-1 py-2 text-sm font-medium rounded-md text-gray-600">Create New</button>
+        </div>
+
+        <!-- List Tab -->
+        <div id="panel-list">
+            <div class="mb-4 flex space-x-2">
+                <input type="text" id="searchInput" placeholder="Search texts..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="searchTexts()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Search</button>
+            </div>
+            <div id="textList" class="space-y-3"></div>
+        </div>
+
+        <!-- Add Tab -->
+        <div id="panel-add" style="display:none;">
+            <div class="bg-white rounded-xl shadow-md p-5 space-y-4">
+                <h2 class="text-lg font-semibold text-gray-800" id="formTitle">New Congratulation Text</h2>
+                <input type="hidden" id="editId" value="">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                    <input type="text" id="textTitle" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Birthday wish for friend">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Text *</label>
+                    <textarea id="textBody" rows="5" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Write your congratulation text..." required></textarea>
+                </div>
+
+                <!-- Confirmation step -->
+                <div id="confirmSection" style="display:none;" class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p class="text-sm font-medium text-yellow-800 mb-2">Please confirm:</p>
+                    <div id="confirmDetails" class="text-sm text-gray-700 space-y-1"></div>
+                    <div class="flex space-x-2 mt-3">
+                        <button onclick="confirmSave()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">Confirm &amp; Save</button>
+                        <button onclick="cancelConfirm()" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 text-sm">Cancel</button>
+                    </div>
+                </div>
+
+                <button onclick="prepareSave()" id="saveBtn" class="w-full bg-green-600 text-white py-2.5 rounded-lg hover:bg-green-700 font-medium">Save Text</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let pendingData = null;
+
+        function showTab(tab) {
+            ['list', 'add'].forEach(t => {
+                document.getElementById('panel-' + t).style.display = t === tab ? 'block' : 'none';
+                const btn = document.getElementById('tab-' + t);
+                if (t === tab) { btn.classList.add('bg-white', 'shadow', 'text-gray-800'); btn.classList.remove('text-gray-600'); }
+                else { btn.classList.remove('bg-white', 'shadow', 'text-gray-800'); btn.classList.add('text-gray-600'); }
+            });
+            if (tab === 'list') loadTexts();
+        }
+
+        async function loadTexts() {
+            const resp = await fetch(apiUrl('/api/congrats'));
+            const data = await resp.json();
+            const container = document.getElementById('textList');
+            if (!data.length) { container.innerHTML = '<p class="text-gray-500 text-center py-8">No congratulation texts yet. Create your first one!</p>'; return; }
+            container.innerHTML = data.map(t => `
+                <div class="bg-white rounded-xl shadow-md p-4">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1 mr-3">
+                            ${t.title ? '<h3 class="font-semibold text-gray-800">' + esc(t.title) + '</h3>' : ''}
+                            <p class="text-sm text-gray-600 mt-1">${esc(t.body)}</p>
+                            <p class="text-xs text-gray-400 mt-1">${t.created_at}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="editText(${t.id})" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+                            <button onclick="deleteText(${t.id})" class="text-red-500 hover:text-red-700 text-sm font-medium">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function searchTexts() {
+            const q = document.getElementById('searchInput').value;
+            const resp = await fetch(apiUrl('/api/congrats/search') + '&q=' + encodeURIComponent(q));
+            const data = await resp.json();
+            const container = document.getElementById('textList');
+            if (!data.length) { container.innerHTML = '<p class="text-gray-500 text-center py-4">No results found.</p>'; return; }
+            container.innerHTML = data.map(t => `
+                <div class="bg-white rounded-xl shadow-md p-4">
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1 mr-3">
+                            ${t.title ? '<h3 class="font-semibold text-gray-800">' + esc(t.title) + '</h3>' : ''}
+                            <p class="text-sm text-gray-600 mt-1">${esc(t.body)}</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="editText(${t.id})" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+                            <button onclick="deleteText(${t.id})" class="text-red-500 hover:text-red-700 text-sm font-medium">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function editText(id) {
+            const resp = await fetch(apiUrl('/api/congrats/' + id));
+            const t = await resp.json();
+            document.getElementById('editId').value = t.id;
+            document.getElementById('textTitle').value = t.title || '';
+            document.getElementById('textBody').value = t.body;
+            document.getElementById('formTitle').textContent = 'Edit Congratulation Text';
+            document.getElementById('saveBtn').textContent = 'Update Text';
+            showTab('add');
+        }
+
+        async function deleteText(id) {
+            if (!confirm('Delete this congratulation text?')) return;
+            await fetch(apiUrl('/api/congrats/' + id), { method: 'DELETE' });
+            loadTexts();
+        }
+
+        function prepareSave() {
+            const body = document.getElementById('textBody').value.trim();
+            if (!body) { alert('Please enter the congratulation text'); return; }
+            const title = document.getElementById('textTitle').value.trim();
+            pendingData = { title, body };
+            document.getElementById('confirmDetails').innerHTML = `
+                ${title ? '<p><strong>Title:</strong> ' + esc(title) + '</p>' : ''}
+                <p><strong>Text:</strong> ${esc(body)}</p>
+            `;
+            document.getElementById('confirmSection').style.display = 'block';
+            document.getElementById('saveBtn').style.display = 'none';
+        }
+
+        function cancelConfirm() {
+            document.getElementById('confirmSection').style.display = 'none';
+            document.getElementById('saveBtn').style.display = 'block';
+            pendingData = null;
+        }
+
+        async function confirmSave() {
+            if (!pendingData) return;
+            const editId = document.getElementById('editId').value;
+            if (editId) {
+                await fetch(apiUrl('/api/congrats/' + editId), { method: 'PUT', headers, body: JSON.stringify(pendingData) });
+            } else {
+                await fetch(apiUrl('/api/congrats'), { method: 'POST', headers, body: JSON.stringify(pendingData) });
+            }
+            resetForm();
+            showTab('list');
+        }
+
+        function resetForm() {
+            document.getElementById('editId').value = '';
+            document.getElementById('textTitle').value = '';
+            document.getElementById('textBody').value = '';
+            document.getElementById('formTitle').textContent = 'New Congratulation Text';
+            document.getElementById('saveBtn').textContent = 'Save Text';
+            document.getElementById('confirmSection').style.display = 'none';
+            document.getElementById('saveBtn').style.display = 'block';
+            pendingData = null;
+        }
+
+        function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+        document.getElementById('searchInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchTexts(); });
+        loadTexts();
+    </script>
+</body>
+</html>

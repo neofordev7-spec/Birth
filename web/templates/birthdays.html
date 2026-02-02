@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Birthdays - Birthday Bot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <script>
+        const tg = window.Telegram?.WebApp;
+        if (tg) tg.ready();
+        function getUserId() {
+            if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) return tg.initDataUnsafe.user.id;
+            return new URLSearchParams(window.location.search).get('user_id') || 0;
+        }
+        function apiUrl(path) {
+            return path + (path.includes('?') ? '&' : '?') + 'user_id=' + getUserId();
+        }
+        const headers = { 'Content-Type': 'application/json' };
+    </script>
+
+    <div class="max-w-lg mx-auto p-4">
+        <!-- Header -->
+        <div class="flex items-center mb-6">
+            <a href="/" class="text-blue-600 mr-3">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </a>
+            <h1 class="text-2xl font-bold text-gray-800">Birthdays</h1>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex space-x-1 bg-gray-200 rounded-lg p-1 mb-6">
+            <button onclick="showTab('list')" id="tab-list" class="flex-1 py-2 text-sm font-medium rounded-md bg-white shadow text-gray-800">List</button>
+            <button onclick="showTab('add')" id="tab-add" class="flex-1 py-2 text-sm font-medium rounded-md text-gray-600">Add New</button>
+            <button onclick="showTab('stats')" id="tab-stats" class="flex-1 py-2 text-sm font-medium rounded-md text-gray-600">Stats</button>
+            <button onclick="showTab('calendar')" id="tab-calendar" class="flex-1 py-2 text-sm font-medium rounded-md text-gray-600">Calendar</button>
+        </div>
+
+        <!-- List Tab -->
+        <div id="panel-list">
+            <div class="mb-4 flex space-x-2">
+                <input type="text" id="searchInput" placeholder="Search birthdays..." class="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button onclick="searchBirthdays()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Search</button>
+            </div>
+            <div class="mb-3">
+                <a id="exportLink" class="text-blue-600 text-sm hover:underline cursor-pointer">Export to CSV</a>
+            </div>
+            <div id="birthdayList" class="space-y-3"></div>
+        </div>
+
+        <!-- Add Tab -->
+        <div id="panel-add" style="display:none;">
+            <div id="addForm" class="bg-white rounded-xl shadow-md p-5 space-y-4">
+                <h2 class="text-lg font-semibold text-gray-800" id="formTitle">New Birthday</h2>
+                <input type="hidden" id="editId" value="">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                    <input type="text" id="fullName" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
+                    <input type="date" id="dateOfBirth" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Relationship</label>
+                    <select id="relationship" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="friend">Friend</option>
+                        <option value="family">Family</option>
+                        <option value="relative">Relative</option>
+                        <option value="colleague">Colleague</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="flex items-center">
+                    <input type="checkbox" id="giftRequired" class="w-4 h-4 text-blue-600 rounded mr-2">
+                    <label for="giftRequired" class="text-sm font-medium text-gray-700">Gift Required</label>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Congratulation Text (optional)</label>
+                    <div class="mb-2">
+                        <select id="templateSelect" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <option value="">-- Select a template or write custom --</option>
+                        </select>
+                    </div>
+                    <textarea id="congratsText" rows="3" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Write a custom congratulation text..."></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Notes (optional)</label>
+                    <textarea id="notes" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Any additional notes..."></textarea>
+                </div>
+
+                <!-- Confirmation step -->
+                <div id="confirmSection" style="display:none;" class="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p class="text-sm font-medium text-yellow-800 mb-2">Please confirm the details:</p>
+                    <div id="confirmDetails" class="text-sm text-gray-700 space-y-1"></div>
+                    <div class="flex space-x-2 mt-3">
+                        <button onclick="confirmSave()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">Confirm &amp; Save</button>
+                        <button onclick="cancelConfirm()" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 text-sm">Cancel</button>
+                    </div>
+                </div>
+
+                <button onclick="prepareSave()" id="saveBtn" class="w-full bg-blue-600 text-white py-2.5 rounded-lg hover:bg-blue-700 font-medium">Save Birthday</button>
+            </div>
+        </div>
+
+        <!-- Stats Tab -->
+        <div id="panel-stats" style="display:none;">
+            <div id="statsContent" class="space-y-4"></div>
+        </div>
+
+        <!-- Calendar Tab -->
+        <div id="panel-calendar" style="display:none;">
+            <div class="flex items-center justify-between mb-4">
+                <button onclick="changeMonth(-1)" class="bg-gray-200 px-3 py-1 rounded-lg hover:bg-gray-300">&lt;</button>
+                <span id="calendarTitle" class="font-semibold text-gray-800"></span>
+                <button onclick="changeMonth(1)" class="bg-gray-200 px-3 py-1 rounded-lg hover:bg-gray-300">&gt;</button>
+            </div>
+            <div id="calendarGrid"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentMonth = new Date().getMonth() + 1;
+        let currentYear = new Date().getFullYear();
+        let pendingData = null;
+
+        function showTab(tab) {
+            ['list', 'add', 'stats', 'calendar'].forEach(t => {
+                document.getElementById('panel-' + t).style.display = t === tab ? 'block' : 'none';
+                const btn = document.getElementById('tab-' + t);
+                if (t === tab) { btn.classList.add('bg-white', 'shadow', 'text-gray-800'); btn.classList.remove('text-gray-600'); }
+                else { btn.classList.remove('bg-white', 'shadow', 'text-gray-800'); btn.classList.add('text-gray-600'); }
+            });
+            if (tab === 'list') loadBirthdays();
+            if (tab === 'stats') loadStats();
+            if (tab === 'calendar') loadCalendar();
+            if (tab === 'add') loadTemplates();
+        }
+
+        async function loadBirthdays() {
+            const resp = await fetch(apiUrl('/api/birthdays'));
+            const data = await resp.json();
+            const container = document.getElementById('birthdayList');
+            if (!data.length) { container.innerHTML = '<p class="text-gray-500 text-center py-8">No birthdays yet. Add your first one!</p>'; return; }
+            container.innerHTML = data.map(b => `
+                <div class="bg-white rounded-xl shadow-md p-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-semibold text-gray-800">${esc(b.full_name)}</h3>
+                            <p class="text-sm text-gray-500">${b.date_of_birth} &middot; ${esc(b.relationship)}</p>
+                            ${b.gift_required ? '<span class="inline-block mt-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Gift needed</span>' : ''}
+                            ${b.notes ? '<p class="text-xs text-gray-400 mt-1">' + esc(b.notes) + '</p>' : ''}
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="editBirthday(${b.id})" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+                            <button onclick="deleteBirthday(${b.id})" class="text-red-500 hover:text-red-700 text-sm font-medium">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function searchBirthdays() {
+            const q = document.getElementById('searchInput').value;
+            const resp = await fetch(apiUrl('/api/birthdays/search') + '&q=' + encodeURIComponent(q));
+            const data = await resp.json();
+            const container = document.getElementById('birthdayList');
+            if (!data.length) { container.innerHTML = '<p class="text-gray-500 text-center py-4">No results found.</p>'; return; }
+            container.innerHTML = data.map(b => `
+                <div class="bg-white rounded-xl shadow-md p-4">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="font-semibold text-gray-800">${esc(b.full_name)}</h3>
+                            <p class="text-sm text-gray-500">${b.date_of_birth} &middot; ${esc(b.relationship)}</p>
+                            ${b.gift_required ? '<span class="inline-block mt-1 text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Gift needed</span>' : ''}
+                        </div>
+                        <div class="flex space-x-2">
+                            <button onclick="editBirthday(${b.id})" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Edit</button>
+                            <button onclick="deleteBirthday(${b.id})" class="text-red-500 hover:text-red-700 text-sm font-medium">Delete</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function editBirthday(id) {
+            const resp = await fetch(apiUrl('/api/birthdays/' + id));
+            const b = await resp.json();
+            document.getElementById('editId').value = b.id;
+            document.getElementById('fullName').value = b.full_name;
+            document.getElementById('dateOfBirth').value = b.date_of_birth;
+            document.getElementById('relationship').value = b.relationship;
+            document.getElementById('giftRequired').checked = !!b.gift_required;
+            document.getElementById('congratsText').value = b.congratulation_text || '';
+            document.getElementById('notes').value = b.notes || '';
+            document.getElementById('formTitle').textContent = 'Edit Birthday';
+            document.getElementById('saveBtn').textContent = 'Update Birthday';
+            showTab('add');
+        }
+
+        async function deleteBirthday(id) {
+            if (!confirm('Delete this birthday?')) return;
+            await fetch(apiUrl('/api/birthdays/' + id), { method: 'DELETE' });
+            loadBirthdays();
+        }
+
+        function prepareSave() {
+            const name = document.getElementById('fullName').value.trim();
+            const dob = document.getElementById('dateOfBirth').value;
+            if (!name || !dob) { alert('Please fill in Full Name and Date of Birth'); return; }
+            const rel = document.getElementById('relationship').value;
+            const gift = document.getElementById('giftRequired').checked;
+            const congrats = document.getElementById('congratsText').value.trim();
+            const notes = document.getElementById('notes').value.trim();
+            pendingData = { full_name: name, date_of_birth: dob, relationship: rel, gift_required: gift, congratulation_text: congrats, notes: notes };
+            document.getElementById('confirmDetails').innerHTML = `
+                <p><strong>Name:</strong> ${esc(name)}</p>
+                <p><strong>Date:</strong> ${dob}</p>
+                <p><strong>Relationship:</strong> ${rel}</p>
+                <p><strong>Gift:</strong> ${gift ? 'Yes' : 'No'}</p>
+                ${congrats ? '<p><strong>Text:</strong> ' + esc(congrats) + '</p>' : ''}
+                ${notes ? '<p><strong>Notes:</strong> ' + esc(notes) + '</p>' : ''}
+            `;
+            document.getElementById('confirmSection').style.display = 'block';
+            document.getElementById('saveBtn').style.display = 'none';
+        }
+
+        function cancelConfirm() {
+            document.getElementById('confirmSection').style.display = 'none';
+            document.getElementById('saveBtn').style.display = 'block';
+            pendingData = null;
+        }
+
+        async function confirmSave() {
+            if (!pendingData) return;
+            const editId = document.getElementById('editId').value;
+            if (editId) {
+                await fetch(apiUrl('/api/birthdays/' + editId), { method: 'PUT', headers, body: JSON.stringify(pendingData) });
+            } else {
+                await fetch(apiUrl('/api/birthdays'), { method: 'POST', headers, body: JSON.stringify(pendingData) });
+            }
+            resetForm();
+            showTab('list');
+        }
+
+        function resetForm() {
+            document.getElementById('editId').value = '';
+            document.getElementById('fullName').value = '';
+            document.getElementById('dateOfBirth').value = '';
+            document.getElementById('relationship').value = 'friend';
+            document.getElementById('giftRequired').checked = false;
+            document.getElementById('congratsText').value = '';
+            document.getElementById('notes').value = '';
+            document.getElementById('formTitle').textContent = 'New Birthday';
+            document.getElementById('saveBtn').textContent = 'Save Birthday';
+            document.getElementById('confirmSection').style.display = 'none';
+            document.getElementById('saveBtn').style.display = 'block';
+            pendingData = null;
+        }
+
+        async function loadTemplates() {
+            try {
+                const resp = await fetch(apiUrl('/api/congrats'));
+                const data = await resp.json();
+                const sel = document.getElementById('templateSelect');
+                sel.innerHTML = '<option value="">-- Select a template or write custom --</option>';
+                data.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.body;
+                    opt.textContent = t.title || t.body.substring(0, 50);
+                    sel.appendChild(opt);
+                });
+                sel.onchange = function() { if (this.value) document.getElementById('congratsText').value = this.value; };
+            } catch(e) {}
+        }
+
+        async function loadStats() {
+            const resp = await fetch(apiUrl('/api/birthdays/stats'));
+            const s = await resp.json();
+            document.getElementById('statsContent').innerHTML = `
+                <div class="bg-white rounded-xl shadow-md p-5">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4">Statistics</h2>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-blue-50 rounded-lg p-3 text-center">
+                            <p class="text-2xl font-bold text-blue-600">${s.total}</p>
+                            <p class="text-xs text-gray-500">Total Birthdays</p>
+                        </div>
+                        <div class="bg-red-50 rounded-lg p-3 text-center">
+                            <p class="text-2xl font-bold text-red-600">${s.gifts_needed}</p>
+                            <p class="text-xs text-gray-500">Gifts Needed</p>
+                        </div>
+                    </div>
+                    ${s.nearest ? `
+                    <div class="mt-4 bg-green-50 rounded-lg p-3">
+                        <p class="text-sm font-medium text-green-800">Nearest Birthday</p>
+                        <p class="text-sm text-gray-700">${esc(s.nearest.full_name)} - ${s.nearest_date}</p>
+                    </div>` : ''}
+                    ${s.nearest_gift ? `
+                    <div class="mt-3 bg-yellow-50 rounded-lg p-3">
+                        <p class="text-sm font-medium text-yellow-800">Nearest Birthday (Gift)</p>
+                        <p class="text-sm text-gray-700">${esc(s.nearest_gift.full_name)} - ${s.nearest_gift_date}</p>
+                    </div>` : ''}
+                </div>
+            `;
+        }
+
+        async function loadCalendar() {
+            const resp = await fetch(apiUrl('/api/birthdays/calendar') + '&month=' + currentMonth + '&year=' + currentYear);
+            const cal = await resp.json();
+            document.getElementById('calendarTitle').textContent = cal.month_name + ' ' + cal.year;
+            const bdayMap = {};
+            cal.birthdays.forEach(b => { if (!bdayMap[b.day]) bdayMap[b.day] = []; bdayMap[b.day].push(b); });
+            let html = '<div class="grid grid-cols-7 gap-1 text-center text-xs font-medium text-gray-500 mb-1">';
+            ['Mo','Tu','We','Th','Fr','Sa','Su'].forEach(d => html += '<div>' + d + '</div>');
+            html += '</div><div class="grid grid-cols-7 gap-1">';
+            cal.weeks.forEach(week => {
+                week.forEach(day => {
+                    if (day === 0) { html += '<div class="p-2"></div>'; }
+                    else {
+                        const has = bdayMap[day];
+                        html += '<div class="p-2 rounded-lg text-sm ' + (has ? 'bg-blue-100 text-blue-800 font-bold' : 'text-gray-700') + '">';
+                        html += day;
+                        if (has) has.forEach(b => html += '<div class="text-xs truncate">' + esc(b.full_name) + '</div>');
+                        html += '</div>';
+                    }
+                });
+            });
+            html += '</div>';
+            document.getElementById('calendarGrid').innerHTML = html;
+        }
+
+        function changeMonth(delta) {
+            currentMonth += delta;
+            if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+            if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+            loadCalendar();
+        }
+
+        function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+        // Init
+        document.getElementById('exportLink').href = apiUrl('/api/birthdays/export');
+        document.getElementById('searchInput').addEventListener('keypress', e => { if (e.key === 'Enter') searchBirthdays(); });
+        loadBirthdays();
+    </script>
+</body>
+</html>
