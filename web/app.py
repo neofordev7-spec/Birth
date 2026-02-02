@@ -348,6 +348,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/admin/ads", api_admin_create_ad)
 
     # Static files
-    app.router.add_static("/static", STATIC_DIR)
+    if os.path.isdir(STATIC_DIR):
+        app.router.add_static("/static", STATIC_DIR)
 
     return app
